@@ -17,10 +17,10 @@ vim.pack.add {
 
 -- Basic debugging keymaps, feel free to change to your liking!
 vim.keymap.set('n', '<F5>', function() require('dap').continue() end, { desc = 'Debug: Start/Continue' })
-vim.keymap.set('n', '<F1>', function() require('dap').step_into() end, { desc = 'Debug: Step Into' })
-vim.keymap.set('n', '<F2>', function() require('dap').step_over() end, { desc = 'Debug: Step Over' })
-vim.keymap.set('n', '<F3>', function() require('dap').step_out() end, { desc = 'Debug: Step Out' })
-vim.keymap.set('n', '<leader>b', function() require('dap').toggle_breakpoint() end, { desc = 'Debug: Toggle Breakpoint' })
+vim.keymap.set('n', '<F11>', function() require('dap').step_into() end, { desc = 'Debug: Step Into' })
+vim.keymap.set('n', '<F10>', function() require('dap').step_over() end, { desc = 'Debug: Step Over' })
+vim.keymap.set('n', '<S-F11>', function() require('dap').step_out() end, { desc = 'Debug: Step Out' })
+vim.keymap.set('n', '<F9>', function() require('dap').toggle_breakpoint() end, { desc = 'Debug: Toggle Breakpoint' })
 vim.keymap.set('n', '<leader>B', function() require('dap').set_breakpoint(vim.fn.input 'Breakpoint condition: ') end, { desc = 'Debug: Set Breakpoint' })
 -- Toggle to see last session result. Without this, you can't see session output in case of unhandled exception.
 vim.keymap.set('n', '<F7>', function() require('dapui').toggle() end, { desc = 'Debug: See last session result.' })
@@ -70,16 +70,16 @@ dapui.setup {
 }
 
 -- Change breakpoint icons
--- vim.api.nvim_set_hl(0, 'DapBreak', { fg = '#e51400' })
--- vim.api.nvim_set_hl(0, 'DapStop', { fg = '#ffcc00' })
--- local breakpoint_icons = vim.g.have_nerd_font
---     and { Breakpoint = '', BreakpointCondition = '', BreakpointRejected = '', LogPoint = '', Stopped = '' }
---   or { Breakpoint = '●', BreakpointCondition = '⊜', BreakpointRejected = '⊘', LogPoint = '◆', Stopped = '⭔' }
--- for type, icon in pairs(breakpoint_icons) do
---   local tp = 'Dap' .. type
---   local hl = (type == 'Stopped') and 'DapStop' or 'DapBreak'
---   vim.fn.sign_define(tp, { text = icon, texthl = hl, numhl = hl })
--- end
+vim.api.nvim_set_hl(0, 'DapBreak', { fg = '#e51400' })
+vim.api.nvim_set_hl(0, 'DapStop', { fg = '#ffcc00' })
+local breakpoint_icons = vim.g.have_nerd_font
+    and { Breakpoint = '', BreakpointCondition = '', BreakpointRejected = '', LogPoint = '', Stopped = '' }
+  or { Breakpoint = '●', BreakpointCondition = '⊜', BreakpointRejected = '⊘', LogPoint = '◆', Stopped = '⭔' }
+for type, icon in pairs(breakpoint_icons) do
+  local tp = 'Dap' .. type
+  local hl = (type == 'Stopped') and 'DapStop' or 'DapBreak'
+  vim.fn.sign_define(tp, { text = icon, texthl = hl, numhl = hl })
+end
 
 dap.listeners.after.event_initialized['dapui_config'] = dapui.open
 dap.listeners.before.event_terminated['dapui_config'] = dapui.close
@@ -93,3 +93,35 @@ require('dap-go').setup {
     detached = vim.fn.has 'win32' == 0,
   },
 }
+
+-- Custom config
+table.insert(dap.configurations.go, {
+  type = 'go',
+  name = 'Debug refbctl',
+  request = 'launch',
+  program = '${workspaceFolder}/cmd/refbctl',
+  cwd = '${workspaceFolder}',
+  args = { 'addon', 'bulk-update', '--env', 'preview', '--file', '/home/mark/Documents/addon-update.xlsx' },
+  outputMode = 'remote',
+})
+
+-- nvim-dap-go's own configurations already default to outputMode = "remote",
+-- which makes Delve forward the debuggee's stdout/stderr as DAP OutputEvents
+-- instead of leaving them on its own process pipe. nvim-dap prints those
+-- OutputEvents into the REPL window (dapui's "console" panel is a separate
+-- PTY that only receives output from adapters supporting
+-- console = "integratedTerminal", which Delve doesn't).
+--
+-- Configurations read from a project's .vscode/launch.json (e.g. Go configs
+-- written for VS Code) typically don't set outputMode, so patch it in here
+-- for any "go" launch config that doesn't already set outputMode or console,
+-- without having to edit the shared launch.json file itself.
+local vscode_ext = require 'dap.ext.vscode'
+local orig_getconfigs = vscode_ext.getconfigs
+vscode_ext.getconfigs = function(path)
+  local configs = orig_getconfigs(path)
+  for _, cfg in ipairs(configs) do
+    if cfg.type == 'go' and cfg.request == 'launch' and cfg.outputMode == nil and cfg.console == nil then cfg.outputMode = 'remote' end
+  end
+  return configs
+end
